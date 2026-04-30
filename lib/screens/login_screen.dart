@@ -3,13 +3,75 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/primary_button.dart';
+import '../services/auth_service.dart';
 import 'home_screen.dart';
 import 'register_screen.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   static const String routeName = '/login';
 
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      _showError('Please fill in all fields');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await AuthService().login(email, password);
+
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, HomeScreen.routeName);
+      }
+    } catch (e) {
+      String message = 'Login failed. Please try again.';
+      if (e.toString().contains('user-not-found')) {
+        message = 'No account found with this email';
+      } else if (e.toString().contains('wrong-password')) {
+        message = 'Incorrect password';
+      } else if (e.toString().contains('invalid-email')) {
+        message = 'Please enter a valid email address';
+      } else if (e.toString().contains('invalid-credential')) {
+        message = 'Incorrect email or password';
+      }
+      _showError(message);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade400,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,17 +112,19 @@ class LoginScreen extends StatelessWidget {
 
               const SizedBox(height: 36),
 
-              const CustomTextField(
+              CustomTextField(
                 hintText: 'Email address',
                 prefixIcon: Icons.email_outlined,
+                controller: _emailController,
               ),
 
               const SizedBox(height: 16),
 
-              const CustomTextField(
+              CustomTextField(
                 hintText: 'Password',
                 prefixIcon: Icons.lock_outline,
                 obscureText: true,
+                controller: _passwordController,
               ),
 
               const SizedBox(height: 12),
@@ -82,14 +146,9 @@ class LoginScreen extends StatelessWidget {
               const SizedBox(height: 12),
 
               PrimaryButton(
-                text: 'Login',
-                icon: Icons.arrow_forward_rounded,
-                onPressed: () {
-                  Navigator.pushReplacementNamed(
-                    context,
-                    HomeScreen.routeName,
-                  );
-                },
+                text: _isLoading ? 'Logging in...' : 'Login',
+                icon: _isLoading ? null : Icons.arrow_forward_rounded,
+                onPressed: _isLoading ? null : _login,
               ),
 
               const SizedBox(height: 20),

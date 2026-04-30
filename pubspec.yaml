@@ -1,5 +1,5 @@
-name: ui_for_project
-description: "A new Flutter project."
+name: SwiftSync
+description: "Developed by Abdul Sami Abbasi"
 publish_to: 'none'
 version: 0.1.0
 
@@ -9,15 +9,25 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  firebase_core: ^4.7.0
+  firebase_auth: ^6.4.0
+  cloud_firestore: ^6.3.0
+  connectivity_plus: ^7.1.1
+  image_picker: ^1.2.2
+  firebase_storage: ^13.3.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/app_logo.png"
 
 flutter:
   uses-material-design: true
   assets:
     - assets/images/
-
-

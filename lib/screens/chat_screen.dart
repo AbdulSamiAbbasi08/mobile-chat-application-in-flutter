@@ -1,50 +1,125 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_colors.dart';
+import '../services/auth_service.dart';
 
-class ChatScreen extends StatelessWidget {
+class ChatScreen extends StatefulWidget {
   static const String routeName = '/chat';
 
   const ChatScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final messages = [
-      {'text': 'Hey, are you free tonight?', 'isMe': false, 'time': '10:20 PM'},
-      {'text': 'Yes, I am free.', 'isMe': true, 'time': '10:21 PM'},
-      {'text': 'Great, let’s discuss the project.', 'isMe': false, 'time': '10:22 PM'},
-      {'text': 'Sure, send me the details.', 'isMe': true, 'time': '10:23 PM'},
-    ];
+  State<ChatScreen> createState() => _ChatScreenState();
+}
 
+class _ChatScreenState extends State<ChatScreen> {
+  final _messageController = TextEditingController();
+  final _scrollController = ScrollController();
+  late String _chatRoomId;
+  late String _otherName;
+  late String _currentUid;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentUid = AuthService().currentUser!.uid;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    _chatRoomId = args['chatRoomId'];
+    _otherName = args['name'] ?? 'Unknown';
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+
+    _messageController.clear();
+
+    final db = FirebaseFirestore.instance;
+
+    // Add message to subcollection
+    await db
+        .collection('chatRooms')
+        .doc(_chatRoomId)
+        .collection('messages')
+        .add({
+      'text': text,
+      'senderId': _currentUid,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    // Update last message in chat room
+    await db.collection('chatRooms').doc(_chatRoomId).update({
+      'lastMessage': text,
+      'lastMessageTime': FieldValue.serverTimestamp(),
+      'lastMessageSenderId': _currentUid,
+    });
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      });
+    }
+  }
+
+  String _formatTime(Timestamp? timestamp) {
+    if (timestamp == null) return '';
+    final date = timestamp.toDate();
+    final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
+    final period = date.hour >= 12 ? 'PM' : 'AM';
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute $period';
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
-        title: const Row(
+        title: Row(
           children: [
             CircleAvatar(
               radius: 18,
               backgroundColor: AppColors.primaryPurple,
               child: Text(
-                'A',
-                style: TextStyle(
+                _otherName[0].toUpperCase(),
+                style: const TextStyle(
                   color: AppColors.white,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Abdul Sami',
-                  style: TextStyle(
+                  _otherName,
+                  style: const TextStyle(
                     color: AppColors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                SizedBox(height: 2),
-                Text(
+                const SizedBox(height: 2),
+                const Text(
                   'Online',
                   style: TextStyle(
                     color: AppColors.success,
@@ -59,70 +134,102 @@ class ChatScreen extends StatelessWidget {
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                final message = messages[index];
-                final bool isMe = message['isMe'] as bool;
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('chatRooms')
+                  .doc(_chatRoomId)
+                  .collection('messages')
+                  .orderBy('timestamp', descending: false)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                return Align(
-                  alignment:
-                      isMe ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'No messages yet.\nSay hello! 👋',
+                      style: TextStyle(color: AppColors.hintText),
+                      textAlign: TextAlign.center,
                     ),
-                    constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width * 0.72,
-                    ),
-                    decoration: BoxDecoration(
-                      gradient: isMe
-                          ? const LinearGradient(
-                              colors: [
-                                AppColors.primaryPurple,
-                                AppColors.secondaryPurple,
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            )
-                          : null,
-                      color: isMe ? null : AppColors.cardBackground,
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(18),
-                        topRight: const Radius.circular(18),
-                        bottomLeft: Radius.circular(isMe ? 18 : 4),
-                        bottomRight: Radius.circular(isMe ? 4 : 18),
+                  );
+                }
+
+                final messages = snapshot.data!.docs;
+
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _scrollToBottom();
+                });
+
+                return ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    final msg = messages[index].data() as Map<String, dynamic>;
+                    final bool isMe = msg['senderId'] == _currentUid;
+                    final time = _formatTime(msg['timestamp'] as Timestamp?);
+
+                    return Align(
+                      alignment:
+                          isMe ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width * 0.72,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: isMe
+                              ? const LinearGradient(
+                                  colors: [
+                                    AppColors.primaryPurple,
+                                    AppColors.secondaryPurple,
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                )
+                              : null,
+                          color: isMe ? null : AppColors.cardBackground,
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(18),
+                            topRight: const Radius.circular(18),
+                            bottomLeft: Radius.circular(isMe ? 18 : 4),
+                            bottomRight: Radius.circular(isMe ? 4 : 18),
+                          ),
+                          border: isMe
+                              ? null
+                              : Border.all(color: AppColors.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              msg['text'] ?? '',
+                              style: const TextStyle(
+                                color: AppColors.white,
+                                fontSize: 15,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              time,
+                              style: TextStyle(
+                                color: isMe
+                                    ? AppColors.white.withOpacity(0.85)
+                                    : AppColors.hintText,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      border: isMe
-                          ? null
-                          : Border.all(color: AppColors.border),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          message['text'] as String,
-                          style: const TextStyle(
-                            color: AppColors.white,
-                            fontSize: 15,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          message['time'] as String,
-                          style: TextStyle(
-                            color: isMe
-                                ? AppColors.white.withOpacity(0.85)
-                                : AppColors.hintText,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                    );
+                  },
                 );
               },
             ),
@@ -142,9 +249,12 @@ class ChatScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(color: AppColors.border),
                     ),
-                    child: const TextField(
-                      style: TextStyle(color: AppColors.white),
-                      decoration: InputDecoration(
+                    child: TextField(
+                      controller: _messageController,
+                      style: const TextStyle(color: AppColors.white),
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _sendMessage(),
+                      decoration: const InputDecoration(
                         hintText: 'Type a message...',
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(
@@ -170,7 +280,7 @@ class ChatScreen extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
-                    onPressed: () {},
+                    onPressed: _sendMessage,
                     icon: const Icon(
                       Icons.send_rounded,
                       color: AppColors.white,
