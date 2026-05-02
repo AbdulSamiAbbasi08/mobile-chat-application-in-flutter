@@ -68,7 +68,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final diff = now.difference(date);
 
     if (diff.inDays == 0) {
-      final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
+      final hour = date.hour > 12
+          ? date.hour - 12
+          : (date.hour == 0 ? 12 : date.hour);
       final period = date.hour >= 12 ? 'PM' : 'AM';
       final minute = date.minute.toString().padLeft(2, '0');
       return '$hour:$minute $period';
@@ -76,6 +78,61 @@ class _HomeScreenState extends State<HomeScreen> {
       return 'Yesterday';
     } else {
       return '${date.day}/${date.month}/${date.year}';
+    }
+  }
+
+  Future<void> _confirmDeleteChat(
+      BuildContext context, String chatRoomId, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardBackground,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text(
+          'Delete Chat',
+          style: TextStyle(color: AppColors.white, fontWeight: FontWeight.w600),
+        ),
+        content: Text(
+          'Delete your conversation with $name? This cannot be undone.',
+          style: const TextStyle(color: AppColors.secondaryText, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppColors.hintText),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await DatabaseService().deleteChatRoom(chatRoomId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Chat with $name deleted'),
+            backgroundColor: AppColors.cardBackground,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
     }
   }
 
@@ -128,21 +185,34 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: AppTextStyles.small,
                   ),
                   const SizedBox(height: 6),
-                  const Text('Your Conversations', style: AppTextStyles.screenTitle),
+                  const Text('Your Conversations',
+                      style: AppTextStyles.screenTitle),
                   const SizedBox(height: 20),
 
-                  const Text('Recent Chats', style: AppTextStyles.sectionTitle),
-                  const SizedBox(height: 12),
+                  const Text('Recent Chats',
+                      style: AppTextStyles.sectionTitle),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Swipe left to delete a chat',
+                    style: TextStyle(
+                      color: AppColors.hintText,
+                      fontSize: 11,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
 
                   Expanded(
                     child: StreamBuilder<QuerySnapshot>(
                       stream: DatabaseService().getChatRooms(currentUid),
                       builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(child: CircularProgressIndicator());
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                              child: CircularProgressIndicator());
                         }
 
-                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        if (!snapshot.hasData ||
+                            snapshot.data!.docs.isEmpty) {
                           return const Center(
                             child: Text(
                               'No conversations yet.\nTap Search to start chatting!',
@@ -156,91 +226,213 @@ class _HomeScreenState extends State<HomeScreen> {
 
                         return ListView.separated(
                           itemCount: chatRooms.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 12),
                           itemBuilder: (context, index) {
-                            final room = chatRooms[index].data() as Map<String, dynamic>;
-                            final participants = List<String>.from(room['participants']);
-                            final otherUid = participants.firstWhere((id) => id != currentUid);
-                            final color = _avatarColors[index % _avatarColors.length];
+                            final room = chatRooms[index].data()
+                                as Map<String, dynamic>;
+                            final participants =
+                                List<String>.from(room['participants']);
+                            final otherUid = participants
+                                .firstWhere((id) => id != currentUid);
+                            final color =
+                                _avatarColors[index % _avatarColors.length];
+                            final chatRoomId = chatRooms[index].id;
 
                             return FutureBuilder<DocumentSnapshot>(
-                              future: DatabaseService().getUserProfile(otherUid),
+                              future:
+                                  DatabaseService().getUserProfile(otherUid),
                               builder: (context, userSnap) {
                                 final name = userSnap.data?.exists == true
-                                    ? (userSnap.data!.data() as Map<String, dynamic>)['name'] ?? 'Unknown'
+                                    ? (userSnap.data!.data()
+                                            as Map<String, dynamic>)[
+                                            'name'] ??
+                                        'Unknown'
                                     : 'Loading...';
-                                final lastMessage = room['lastMessage'] ?? '';
-                                final time = _formatTime(room['lastMessageTime'] as Timestamp?);
+                                final lastMessage =
+                                    room['lastMessage'] ?? '';
+                                final time = _formatTime(
+                                    room['lastMessageTime'] as Timestamp?);
 
-                                return GestureDetector(
-                                  onTap: () {
-                                    Navigator.pushNamed(
-                                      context,
-                                      ChatScreen.routeName,
-                                      arguments: {
-                                        'uid': otherUid,
-                                        'name': name,
-                                        'chatRoomId': chatRooms[index].id,
-                                      },
-                                    );
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.all(14),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.cardBackground,
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(color: AppColors.border),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        CircleAvatar(
-                                          radius: 26,
-                                          backgroundColor: color,
-                                          child: Text(
-                                            name[0].toUpperCase(),
-                                            style: const TextStyle(
-                                              color: AppColors.white,
-                                              fontWeight: FontWeight.bold,
+                                return Dismissible(
+                                  key: Key(chatRoomId),
+                                  direction: DismissDirection.endToStart,
+                                  confirmDismiss: (_) async {
+                                    final confirmed =
+                                        await showDialog<bool>(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        backgroundColor:
+                                            AppColors.cardBackground,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                        ),
+                                        title: const Text(
+                                          'Delete Chat',
+                                          style: TextStyle(
+                                            color: AppColors.white,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        content: Text(
+                                          'Delete your conversation with $name? This cannot be undone.',
+                                          style: const TextStyle(
+                                            color: AppColors.secondaryText,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context, false),
+                                            child: const Text(
+                                              'Cancel',
+                                              style: TextStyle(
+                                                  color: AppColors.hintText),
                                             ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 14),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                name,
-                                                style: const TextStyle(
-                                                  color: AppColors.white,
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context, true),
+                                            child: const Text(
+                                              'Delete',
+                                              style: TextStyle(
+                                                color: Colors.redAccent,
+                                                fontWeight: FontWeight.w600,
                                               ),
-                                              const SizedBox(height: 6),
-                                              Text(
-                                                lastMessage.isEmpty ? 'Tap to start chatting' : lastMessage,
-                                                style: TextStyle(
-                                                  color: lastMessage.isEmpty
-                                                      ? AppColors.hintText
-                                                      : AppColors.secondaryText,
-                                                  fontSize: 14,
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ],
+                                            ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 10),
+                                        ],
+                                      ),
+                                    );
+
+                                    if (confirmed == true) {
+                                      await DatabaseService()
+                                          .deleteChatRoom(chatRoomId);
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                                'Chat with $name deleted'),
+                                            backgroundColor:
+                                                AppColors.cardBackground,
+                                            behavior:
+                                                SnackBarBehavior.floating,
+                                            shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                        12)),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                    return false; // list updates via stream
+                                  },
+                                  background: Container(
+                                    alignment: Alignment.centerRight,
+                                    padding: const EdgeInsets.only(right: 20),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade700,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: const Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.delete_outline,
+                                            color: Colors.white, size: 26),
+                                        SizedBox(height: 4),
                                         Text(
-                                          time,
-                                          style: const TextStyle(
-                                            color: AppColors.hintText,
+                                          'Delete',
+                                          style: TextStyle(
+                                            color: Colors.white,
                                             fontSize: 12,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
                                       ],
+                                    ),
+                                  ),
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      Navigator.pushNamed(
+                                        context,
+                                        ChatScreen.routeName,
+                                        arguments: {
+                                          'uid': otherUid,
+                                          'name': name,
+                                          'chatRoomId': chatRoomId,
+                                        },
+                                      );
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.cardBackground,
+                                        borderRadius:
+                                            BorderRadius.circular(20),
+                                        border:
+                                            Border.all(color: AppColors.border),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 26,
+                                            backgroundColor: color,
+                                            child: Text(
+                                              name[0].toUpperCase(),
+                                              style: const TextStyle(
+                                                color: AppColors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 14),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  name,
+                                                  style: const TextStyle(
+                                                    color: AppColors.white,
+                                                    fontSize: 16,
+                                                    fontWeight:
+                                                        FontWeight.w600,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 6),
+                                                Text(
+                                                  lastMessage.isEmpty
+                                                      ? 'Tap to start chatting'
+                                                      : lastMessage,
+                                                  style: TextStyle(
+                                                    color: lastMessage.isEmpty
+                                                        ? AppColors.hintText
+                                                        : AppColors
+                                                            .secondaryText,
+                                                    fontSize: 14,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            time,
+                                            style: const TextStyle(
+                                              color: AppColors.hintText,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 );

@@ -4,19 +4,21 @@ class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   // Create user profile on registration
-  Future<void> createUserProfile({
+    Future<void> createUserProfile({
     required String uid,
     required String name,
+    required String username,
     required String email,
   }) async {
     await _db.collection('users').doc(uid).set({
       'uid': uid,
-      'name': name.toLowerCase(),
+      'name': name,
+      'username': username.toLowerCase(),
       'email': email.toLowerCase(),
       'status': 'Available for chatting',
       'createdAt': FieldValue.serverTimestamp(),
     });
-  }
+ }
 
   // Get user profile by uid
   Future<DocumentSnapshot> getUserProfile(String uid) async {
@@ -101,5 +103,42 @@ class DatabaseService {
       }
     }
     return partners;
+  }
+
+    // Check if username already exists
+  Future<bool> isUsernameAvailable(String username) async {
+    final snapshot = await _db
+        .collection('users')
+        .where('username', isEqualTo: username.toLowerCase())
+        .get();
+    return snapshot.docs.isEmpty;
+  }
+
+  // Get email by username for login
+   Future<String?> getEmailByUsername(String username) async {
+      final snapshot = await _db
+          .collection('users')
+          .where('username', isEqualTo: username.toLowerCase())
+          .get();
+      if (snapshot.docs.isEmpty) return null;
+      return snapshot.docs.first['email'] as String?;
+    }
+
+
+    // Delete a chat room and all its messages
+  Future<void> deleteChatRoom(String chatRoomId) async {
+    // Delete all messages in the subcollection first
+    final messages = await _db
+        .collection('chatRooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .get();
+
+    for (var doc in messages.docs) {
+      await doc.reference.delete();
+    }
+
+    // Delete the chat room document
+    await _db.collection('chatRooms').doc(chatRoomId).delete();
   }
 }

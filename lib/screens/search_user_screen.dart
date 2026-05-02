@@ -21,6 +21,7 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
   List<Map<String, dynamic>> _recentPartners = [];
   bool _isLoading = false;
   bool _hasSearched = false;
+  String? _creatingChatForUid; // tracks which user's Chat button is loading
 
   final _avatarColors = [
     AppColors.primaryPurple,
@@ -69,19 +70,16 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
       final currentUid = AuthService().currentUser!.uid;
       final queryLower = query.trim().toLowerCase();
 
-      // Exact match search by name
       final nameSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('name', isEqualTo: queryLower)
           .get();
 
-      // Exact match search by email
       final emailSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('email', isEqualTo: queryLower)
           .get();
 
-      // Combine results and remove duplicates + current user
       final Map<String, Map<String, dynamic>> combined = {};
 
       for (var doc in [...nameSnapshot.docs, ...emailSnapshot.docs]) {
@@ -102,10 +100,52 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
     }
   }
 
+  Future<void> _openChat(Map<String, dynamic> user) async {
+    if (_creatingChatForUid != null) return; // prevent double tap
+
+    final otherUid = user['uid'];
+
+    setState(() => _creatingChatForUid = otherUid);
+
+    try {
+      final currentUid = AuthService().currentUser!.uid;
+      final chatRoomId = await DatabaseService()
+          .getOrCreateChatRoom(currentUid, otherUid);
+
+      if (mounted) {
+        Navigator.pushNamed(
+          context,
+          ChatScreen.routeName,
+          arguments: {
+            'uid': otherUid,
+            'name': user['name'],
+            'chatRoomId': chatRoomId,
+          },
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Failed to open chat. Please try again.'),
+            backgroundColor: Colors.red.shade400,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _creatingChatForUid = null);
+    }
+  }
+
   Widget _buildUserTile(Map<String, dynamic> user, int index) {
     final color = _avatarColors[index % _avatarColors.length];
     final name = user['name'] ?? 'Unknown';
     final email = user['email'] ?? '';
+    final otherUid = user['uid'];
+    final isCreating = _creatingChatForUid == otherUid;
+    final anyCreating = _creatingChatForUid != null;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -152,45 +192,37 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
             ),
           ),
           const SizedBox(width: 10),
+
+          // Chat button with loader
           GestureDetector(
-            onTap: () async {
-              final currentUid = AuthService().currentUser!.uid;
-              final otherUid = user['uid'];
-              final chatRoomId = await DatabaseService()
-                  .getOrCreateChatRoom(currentUid, otherUid);
-              if (context.mounted) {
-                Navigator.pushNamed(
-                  context,
-                  ChatScreen.routeName,
-                  arguments: {
-                    'uid': otherUid,
-                    'name': user['name'],
-                    'chatRoomId': chatRoomId,
-                  },
-                );
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 10,
-              ),
+            onTap: anyCreating ? null : () => _openChat(user),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [
-                    AppColors.primaryPurple,
-                    AppColors.secondaryPurple,
-                  ],
+                gradient: LinearGradient(
+                  colors: anyCreating && !isCreating
+                      ? [AppColors.primaryPurple.withOpacity(0.4), AppColors.secondaryPurple.withOpacity(0.4)]
+                      : [AppColors.primaryPurple, AppColors.secondaryPurple],
                 ),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Text(
-                'Chat',
-                style: TextStyle(
-                  color: AppColors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              child: isCreating
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'Chat',
+                      style: TextStyle(
+                        color: AppColors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
             ),
           ),
         ],
@@ -250,9 +282,7 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
                     vertical: 16,
                   ),
                 ),
-                onChanged: (value) {
-                  setState(() {});
-                },
+                onChanged: (value) => setState(() {}),
               ),
             ),
 
