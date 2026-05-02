@@ -81,61 +81,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _confirmDeleteChat(
-      BuildContext context, String chatRoomId, String name) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.cardBackground,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: const Text(
-          'Delete Chat',
-          style: TextStyle(color: AppColors.white, fontWeight: FontWeight.w600),
-        ),
-        content: Text(
-          'Delete your conversation with $name? This cannot be undone.',
-          style: const TextStyle(color: AppColors.secondaryText, fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.hintText),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(
-                color: Colors.redAccent,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await DatabaseService().deleteChatRoom(chatRoomId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Chat with $name deleted'),
-            backgroundColor: AppColors.cardBackground,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final currentUid = AuthService().currentUser!.uid;
@@ -222,7 +167,22 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         }
 
-                        final chatRooms = snapshot.data!.docs;
+                        // Filter out chats deleted by current user
+                        final chatRooms = snapshot.data!.docs.where((doc) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          final deletedFor = List<String>.from(data['deletedFor'] ?? []);
+                          return !deletedFor.contains(currentUid);
+                        }).toList();
+
+                        if (chatRooms.isEmpty) {
+                          return const Center(
+                            child: Text(
+                              'No conversations yet.\nTap Search to start chatting!',
+                              style: AppTextStyles.small,
+                              textAlign: TextAlign.center,
+                            ),
+                          );
+                        }
 
                         return ListView.separated(
                           itemCount: chatRooms.length,
@@ -276,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           ),
                                         ),
                                         content: Text(
-                                          'Delete your conversation with $name? This cannot be undone.',
+                                          'Delete your conversation with $name? This will only remove it from your view.',
                                           style: const TextStyle(
                                             color: AppColors.secondaryText,
                                             fontSize: 14,
@@ -309,7 +269,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                                     if (confirmed == true) {
                                       await DatabaseService()
-                                          .deleteChatRoom(chatRoomId);
+                                          .deleteChatForUser(chatRoomId, currentUid);
                                       if (context.mounted) {
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(

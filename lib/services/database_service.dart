@@ -4,7 +4,7 @@ class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   // Create user profile on registration
-    Future<void> createUserProfile({
+  Future<void> createUserProfile({
     required String uid,
     required String name,
     required String username,
@@ -18,7 +18,7 @@ class DatabaseService {
       'status': 'Available for chatting',
       'createdAt': FieldValue.serverTimestamp(),
     });
- }
+  }
 
   // Get user profile by uid
   Future<DocumentSnapshot> getUserProfile(String uid) async {
@@ -67,6 +67,7 @@ class DatabaseService {
       'lastMessage': '',
       'lastMessageTime': FieldValue.serverTimestamp(),
       'lastMessageSenderId': '',
+      'deletedFor': [], // Initialize empty array
     });
 
     return newRoom.id;
@@ -92,6 +93,12 @@ class DatabaseService {
 
     final List<Map<String, dynamic>> partners = [];
     for (var room in rooms.docs) {
+      final data = room.data();
+      final deletedFor = List<String>.from(data['deletedFor'] ?? []);
+      
+      // Skip if current user deleted this chat
+      if (deletedFor.contains(uid)) continue;
+
       final participants = List<String>.from(room['participants']);
       final otherUid = participants.firstWhere((id) => id != uid);
       final userDoc = await getUserProfile(otherUid);
@@ -105,7 +112,7 @@ class DatabaseService {
     return partners;
   }
 
-    // Check if username already exists
+  // Check if username already exists
   Future<bool> isUsernameAvailable(String username) async {
     final snapshot = await _db
         .collection('users')
@@ -115,30 +122,19 @@ class DatabaseService {
   }
 
   // Get email by username for login
-   Future<String?> getEmailByUsername(String username) async {
-      final snapshot = await _db
-          .collection('users')
-          .where('username', isEqualTo: username.toLowerCase())
-          .get();
-      if (snapshot.docs.isEmpty) return null;
-      return snapshot.docs.first['email'] as String?;
-    }
-
-
-    // Delete a chat room and all its messages
-  Future<void> deleteChatRoom(String chatRoomId) async {
-    // Delete all messages in the subcollection first
-    final messages = await _db
-        .collection('chatRooms')
-        .doc(chatRoomId)
-        .collection('messages')
+  Future<String?> getEmailByUsername(String username) async {
+    final snapshot = await _db
+        .collection('users')
+        .where('username', isEqualTo: username.toLowerCase())
         .get();
+    if (snapshot.docs.isEmpty) return null;
+    return snapshot.docs.first['email'] as String?;
+  }
 
-    for (var doc in messages.docs) {
-      await doc.reference.delete();
-    }
-
-    // Delete the chat room document
-    await _db.collection('chatRooms').doc(chatRoomId).delete();
+  // Delete chat for one user only (hide it from their view)
+  Future<void> deleteChatForUser(String chatRoomId, String uid) async {
+    await _db.collection('chatRooms').doc(chatRoomId).update({
+      'deletedFor': FieldValue.arrayUnion([uid]),
+    });
   }
 }
