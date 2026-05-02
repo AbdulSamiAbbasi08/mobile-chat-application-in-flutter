@@ -20,7 +20,6 @@ class _SplashScreenState extends State<SplashScreen> {
     super.initState();
 
     Future.delayed(const Duration(seconds: 4), () {
-      // Check if user is already logged in
       final user = AuthService().currentUser;
       final destination = user != null ? const HomeScreen() : const LoginScreen();
 
@@ -61,26 +60,41 @@ class _SplashScreenState extends State<SplashScreen> {
             end: Alignment.bottomRight,
           ),
         ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset(
-                'assets/images/app_logo.png',
-                width: 120,
+        child: Column(
+          children: [
+            const Spacer(),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  'assets/images/app_logo.png',
+                  width: 120,
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  "SwiftSync",
+                  style: AppTextStyles.appTitle,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Lets Chat...",
+                  style: AppTextStyles.small,
+                ),
+              ],
+            ),
+            const Spacer(),
+            const Padding(
+              padding: EdgeInsets.only(bottom: 30),
+              child: Text(
+                'Developed by Abdul Sami Abbasi®',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
-              const SizedBox(height: 20),
-              const Text(
-                "SwiftSync",
-                style: AppTextStyles.appTitle,
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                "Lets Chat...",
-                style: AppTextStyles.small,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
