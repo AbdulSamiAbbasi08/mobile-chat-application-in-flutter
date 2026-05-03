@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "778448751554",
+    "project_id": "swift-sync-by-abdulsami",
+    "storage_bucket": "swift-sync-by-abdulsami.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:778448751554:android:b0c35e1a6df8db9e21e45b",
+        "android_client_info": {
+          "package_name": "com.abdulsami.swiftsync"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDBtPq-Y46fGUZEjcg_COHt1s6Q6z6ChpM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
