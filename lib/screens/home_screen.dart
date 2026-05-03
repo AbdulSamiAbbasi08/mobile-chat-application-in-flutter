@@ -10,6 +10,9 @@ import 'chat_screen.dart';
 import 'profile_screen.dart';
 import 'search_user_screen.dart';
 bool _isNavigating = false;
+// Add this with your other state variables
+final Map<String, String> _nameCache = {};
+
 class HomeScreen extends StatefulWidget {
   static const String routeName = '/home';
 

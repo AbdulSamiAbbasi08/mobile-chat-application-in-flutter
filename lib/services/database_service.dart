@@ -78,7 +78,7 @@ class DatabaseService {
     return _db
         .collection('chatRooms')
         .where('participants', arrayContains: uid)
-        .orderBy('lastMessageTime', descending: true)
+        // .orderBy('lastMessageTime', descending: true) 
         .snapshots();
   }
 
