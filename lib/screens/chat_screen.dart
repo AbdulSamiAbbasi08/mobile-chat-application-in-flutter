@@ -25,8 +25,7 @@ class _ChatScreenState extends State<ChatScreen> {
   late String _currentUid;
   bool _didInit = false;
 
-  // Swipe-to-reply state
-  Map<String, dynamic>? _replyTo; // {text, senderName}
+  Map<String, dynamic>? _replyTo;
 
   @override
   void initState() {
@@ -76,7 +75,6 @@ class _ChatScreenState extends State<ChatScreen> {
       'senderId': _currentUid,
       'timestamp': FieldValue.serverTimestamp(),
       'status': 'sent',
-      // Reply fields — null if not a reply
       if (reply != null) 'replyToText': reply['text'],
       if (reply != null) 'replyToSender': reply['senderName'],
     });
@@ -152,7 +150,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // ── Swipeable message wrapper ─────────────────────────────────────────────
   Widget _buildSwipeableMessage(Map<String, dynamic> msg, Widget child) {
     double dragOffset = 0;
     bool triggered = false;
@@ -161,12 +158,10 @@ class _ChatScreenState extends State<ChatScreen> {
       builder: (context, setLocal) {
         return GestureDetector(
           onHorizontalDragUpdate: (details) {
-            // Only allow right swipe (positive dx)
             if (details.delta.dx > 0) {
               setLocal(() {
                 dragOffset = (dragOffset + details.delta.dx).clamp(0.0, 72.0);
               });
-              // Trigger at 60px
               if (dragOffset >= 60 && !triggered) {
                 triggered = true;
                 _setReply(msg);
@@ -174,7 +169,6 @@ class _ChatScreenState extends State<ChatScreen> {
             }
           },
           onHorizontalDragEnd: (_) {
-            // Snap back
             setLocal(() {
               dragOffset = 0;
               triggered = false;
@@ -182,7 +176,6 @@ class _ChatScreenState extends State<ChatScreen> {
           },
           child: Stack(
             children: [
-              // Reply icon revealed behind
               Positioned.fill(
                 child: Align(
                   alignment: Alignment.centerLeft,
@@ -207,7 +200,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
               ),
-              // Message slides right
               Transform.translate(
                 offset: Offset(dragOffset, 0),
                 child: child,
@@ -219,7 +211,6 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // ── Reply quote bubble ────────────────────────────────────────────────────
   Widget _buildReplyQuote(String senderName, String text, bool isMe) {
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
@@ -248,10 +239,7 @@ class _ChatScreenState extends State<ChatScreen> {
           const SizedBox(height: 2),
           Text(
             text,
-            style: const TextStyle(
-              color: AppColors.secondaryText,
-              fontSize: 13,
-            ),
+            style: const TextStyle(color: AppColors.secondaryText, fontSize: 13),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -451,21 +439,23 @@ class _ChatScreenState extends State<ChatScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
-                    final msg    = messages[index].data() as Map<String, dynamic>;
+                    final msg       = messages[index].data() as Map<String, dynamic>;
                     final bool isMe = msg['senderId'] == _currentUid;
-                    final time   = _formatTime(msg['timestamp'] as Timestamp?);
-                    final status = msg['status'] as String? ?? 'sent';
+                    final time      = _formatTime(msg['timestamp'] as Timestamp?);
+                    final status    = msg['status'] as String? ?? 'sent';
                     final replyText   = msg['replyToText'] as String?;
                     final replySender = msg['replyToSender'] as String?;
+                    final hasReply    = replyText != null && replyText.isNotEmpty && replySender != null;
 
                     final bubble = Align(
                       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                       child: Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width * 0.72,
+                        margin: EdgeInsets.only(
+                          bottom: 6,
+                          left: isMe ? 48 : 0,
+                          right: isMe ? 0 : 48,
                         ),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
                           gradient: isMe
                               ? const LinearGradient(
@@ -474,49 +464,61 @@ class _ChatScreenState extends State<ChatScreen> {
                                   end: Alignment.bottomRight,
                                 )
                               : null,
-                          color: isMe ? null : AppColors.cardBackground,
+                          color: isMe ? null : const Color(0xFF2A2A3D),
                           borderRadius: BorderRadius.only(
                             topLeft: const Radius.circular(18),
                             topRight: const Radius.circular(18),
                             bottomLeft: Radius.circular(isMe ? 18 : 4),
                             bottomRight: Radius.circular(isMe ? 4 : 18),
                           ),
-                          border: isMe ? null : Border.all(color: AppColors.border),
+                          border: isMe
+                              ? null
+                              : Border.all(
+                                  color: AppColors.primaryPurple.withOpacity(0.25),
+                                  width: 1,
+                                ),
                         ),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Reply quote if present
-                            if (replyText != null && replySender != null)
-                              _buildReplyQuote(replySender, replyText, isMe),
+                            // Reply quote — only when message has a reply
+                            if (hasReply)
+                              _buildReplyQuote(replySender!, replyText!, isMe),
 
                             // Message text
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                msg['text'] ?? '',
-                                style: const TextStyle(color: AppColors.white, fontSize: 15),
+                            Text(
+                              msg['text'] ?? '',
+                              style: const TextStyle(
+                                color: AppColors.white,
+                                fontSize: 15,
+                                height: 1.4,
                               ),
                             ),
-                            const SizedBox(height: 6),
-                            // Time + ticks
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  time,
-                                  style: TextStyle(
-                                    color: isMe
-                                        ? AppColors.white.withOpacity(0.85)
-                                        : AppColors.hintText,
-                                    fontSize: 11,
+
+                            const SizedBox(height: 4),
+
+                            // Time + ticks — pushed to right
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    time,
+                                    style: TextStyle(
+                                      color: isMe
+                                          ? AppColors.white.withOpacity(0.7)
+                                          : AppColors.hintText,
+                                      fontSize: 11,
+                                    ),
                                   ),
-                                ),
-                                if (isMe) ...[
-                                  const SizedBox(width: 4),
-                                  _buildTicks(status),
+                                  if (isMe) ...[
+                                    const SizedBox(width: 4),
+                                    _buildTicks(status),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
                           ],
                         ),
@@ -541,8 +543,7 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Row(
                 children: [
                   Container(
-                    width: 3,
-                    height: 40,
+                    width: 3, height: 40,
                     decoration: BoxDecoration(
                       color: AppColors.primaryPurple,
                       borderRadius: BorderRadius.circular(2),

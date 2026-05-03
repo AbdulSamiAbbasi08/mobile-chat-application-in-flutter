@@ -9,12 +9,12 @@ import '../services/database_service.dart';
 import 'chat_screen.dart';
 import 'profile_screen.dart';
 import 'search_user_screen.dart';
-
+bool _isNavigating = false;
 class HomeScreen extends StatefulWidget {
   static const String routeName = '/home';
 
   const HomeScreen({super.key});
-
+  
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -287,20 +287,23 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   child: GestureDetector(
                                     onTap: () async {
-                                      // Mark as read before opening
-                                      await DatabaseService().markChatAsRead(chatRoomId, currentUid);
-                                      if (context.mounted) {
-                                        Navigator.pushNamed(
-                                          context,
-                                          ChatScreen.routeName,
-                                          arguments: {
-                                            'uid': otherUid,
-                                            'name': name,
-                                            'chatRoomId': chatRoomId,
-                                          },
-                                        );
-                                      }
-                                    },
+  if (_isNavigating) return;
+  _isNavigating = true;
+
+  await DatabaseService().markChatAsRead(chatRoomId, currentUid);
+  if (context.mounted) {
+    await Navigator.pushNamed(
+      context,
+      ChatScreen.routeName,
+      arguments: {
+        'uid': otherUid,
+        'name': name,
+        'chatRoomId': chatRoomId,
+      },
+    );
+  }
+  _isNavigating = false;
+},
                                     child: Container(
                                       padding: const EdgeInsets.all(14),
                                       decoration: BoxDecoration(
@@ -369,23 +372,34 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 const SizedBox(height: 6),
                                                 // Bold white preview if unread
                                                 Text(
-                                                  lastMessage.isEmpty
-                                                      ? 'Tap to start chatting'
-                                                      : lastMessage,
-                                                  style: TextStyle(
-                                                    color: unread
-                                                        ? AppColors.white
-                                                        : (lastMessage.isEmpty
-                                                            ? AppColors.hintText
-                                                            : AppColors.secondaryText),
-                                                    fontSize: 14,
-                                                    fontWeight: unread
-                                                        ? FontWeight.w600
-                                                        : FontWeight.normal,
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
+  lastMessage.isEmpty
+      ? 'Tap to start chatting'
+      : () {
+          final senderId = room['lastMessageSenderId'] as String? ?? '';
+          if (senderId.isEmpty) return lastMessage;
+
+          String prefix;
+          if (senderId == currentUid) {
+            prefix = 'You';
+          } else {
+            // First word of other user's full name
+            final firstName = name.split(' ').first;
+            prefix = firstName[0].toUpperCase() + firstName.substring(1);
+          }
+          return '$prefix: $lastMessage';
+        }(),
+  style: TextStyle(
+    color: unread
+        ? AppColors.white
+        : (lastMessage.isEmpty
+            ? AppColors.hintText
+            : AppColors.secondaryText),
+    fontSize: 14,
+    fontWeight: unread ? FontWeight.w600 : FontWeight.normal,
+  ),
+  maxLines: 1,
+  overflow: TextOverflow.ellipsis,
+),
                                               ],
                                             ),
                                           ),

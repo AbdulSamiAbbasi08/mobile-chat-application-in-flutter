@@ -160,18 +160,24 @@ class DatabaseService {
 
     // Mark all messages in a chat as seen by the receiver
   Future<void> markMessagesAsSeen(String chatRoomId, String currentUid) async {
-    final messages = await _db
-        .collection('chatRooms')
-        .doc(chatRoomId)
-        .collection('messages')
-        .where('senderId', isNotEqualTo: currentUid)
-        .where('status', isNotEqualTo: 'seen')
-        .get();
+  final messages = await _db
+      .collection('chatRooms')
+      .doc(chatRoomId)
+      .collection('messages')
+      .where('senderId', isNotEqualTo: currentUid)
+      .get();
 
-    final batch = _db.batch();
-    for (final doc in messages.docs) {
-      batch.update(doc.reference, {'status': 'seen'});
-    }
-    await batch.commit();
+  final docsToUpdate = messages.docs.where((doc) {
+    final status = doc.data()['status'] as String? ?? 'sent';
+    return status != 'seen';
+  }).toList();
+
+  if (docsToUpdate.isEmpty) return;
+
+  final batch = _db.batch();
+  for (final doc in docsToUpdate) {
+    batch.update(doc.reference, {'status': 'seen'});
   }
+  await batch.commit();
+}
 }
