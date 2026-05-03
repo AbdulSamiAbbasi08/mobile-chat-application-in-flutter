@@ -137,4 +137,41 @@ class DatabaseService {
       'deletedFor': FieldValue.arrayUnion([uid]),
     });
   }
+
+    // Update full profile (name + status)
+  Future<void> updateUserProfile(String uid, {
+    required String name,
+    required String status,
+  }) async {
+    await _db.collection('users').doc(uid).update({
+      'name': name.toLowerCase(),
+      'status': status,
+    });
+  }
+
+
+    // Mark chat as read by updating lastReadTime for current user
+  Future<void> markChatAsRead(String chatRoomId, String uid) async {
+    await _db.collection('chatRooms').doc(chatRoomId).update({
+      'lastRead.$uid': FieldValue.serverTimestamp(),
+    });
+  }
+
+
+    // Mark all messages in a chat as seen by the receiver
+  Future<void> markMessagesAsSeen(String chatRoomId, String currentUid) async {
+    final messages = await _db
+        .collection('chatRooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .where('senderId', isNotEqualTo: currentUid)
+        .where('status', isNotEqualTo: 'seen')
+        .get();
+
+    final batch = _db.batch();
+    for (final doc in messages.docs) {
+      batch.update(doc.reference, {'status': 'seen'});
+    }
+    await batch.commit();
+  }
 }

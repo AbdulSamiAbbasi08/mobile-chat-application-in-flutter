@@ -17,6 +17,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   String _name = '';
+  String _username = '';
   String _email = '';
   String _status = 'Available for chatting';
   bool _isLoading = true;
@@ -34,9 +35,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (doc.exists) {
         final data = doc.data() as Map<String, dynamic>;
         setState(() {
-          _name = data['name'] ?? '';
-          _email = data['email'] ?? '';
-          _status = data['status'] ?? 'Available for chatting';
+          _name     = data['name'] ?? '';
+          _username = data['username'] ?? '';
+          _email    = data['email'] ?? '';
+          _status   = data['status'] ?? 'Available for chatting';
           _isLoading = false;
         });
       }
@@ -54,30 +56,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  void _showEditNameDialog() {
-    final controller = TextEditingController(text: _name);
+  // ── Full Edit Profile dialog ──────────────────────────────────────────────
+  void _showEditProfileDialog() {
+    final nameController   = TextEditingController(text: _name);
+    final statusController = TextEditingController(text: _status);
+
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.cardBackground,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Edit Name', style: TextStyle(color: AppColors.white)),
-        content: TextField(
-          controller: controller,
-          style: const TextStyle(color: AppColors.white),
-          decoration: InputDecoration(
-            hintText: 'Enter new name',
-            hintStyle: const TextStyle(color: AppColors.hintText),
-            filled: true,
-            fillColor: AppColors.inputFill,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: AppColors.border),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: AppColors.border),
-            ),
+        title: const Text(
+          'Edit Profile',
+          style: TextStyle(color: AppColors.white, fontWeight: FontWeight.bold),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Full Name — editable
+              _dialogLabel('Full Name'),
+              const SizedBox(height: 6),
+              _dialogTextField(nameController, 'Full name', icon: Icons.person_outline),
+
+              const SizedBox(height: 16),
+
+              // Username — read-only
+              _dialogLabel('Username'),
+              const SizedBox(height: 6),
+              _readOnlyField(
+                value: '@$_username',
+                icon: Icons.alternate_email,
+                note: 'Username cannot be changed',
+              ),
+
+              const SizedBox(height: 16),
+
+              // Email — read-only
+              _dialogLabel('Email'),
+              const SizedBox(height: 6),
+              _readOnlyField(
+                value: _email,
+                icon: Icons.email_outlined,
+                note: 'Email cannot be changed here',
+              ),
+
+              const SizedBox(height: 16),
+
+              // Status — editable
+              _dialogLabel('Status'),
+              const SizedBox(height: 6),
+              _dialogTextField(statusController, 'Your status', icon: Icons.info_outline),
+            ],
           ),
         ),
         actions: [
@@ -87,21 +119,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           TextButton(
             onPressed: () async {
-              final newName = controller.text.trim();
-              if (newName.isNotEmpty) {
-                final uid = AuthService().currentUser!.uid;
-                await DatabaseService().updateUserName(uid, newName);
-                setState(() => _name = newName.toLowerCase());
-                if (mounted) Navigator.pop(context);
+              final newName   = nameController.text.trim();
+              final newStatus = statusController.text.trim();
+
+              if (newName.isEmpty) {
+                _showSnackBar('Name cannot be empty');
+                return;
               }
+
+              final uid = AuthService().currentUser!.uid;
+              await DatabaseService().updateUserProfile(
+                uid,
+                name: newName,
+                status: newStatus.isNotEmpty ? newStatus : _status,
+              );
+
+              setState(() {
+                _name   = newName.toLowerCase();
+                _status = newStatus.isNotEmpty ? newStatus : _status;
+              });
+
+              if (mounted) Navigator.pop(context);
             },
-            child: const Text('Save', style: TextStyle(color: AppColors.primaryPurple)),
+            child: const Text(
+              'Save',
+              style: TextStyle(
+                color: AppColors.primaryPurple,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
+  // ── Status-only dialog (tapping the badge) ────────────────────────────────
   void _showEditStatusDialog() {
     final controller = TextEditingController(text: _status);
     showDialog(
@@ -110,24 +163,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: AppColors.cardBackground,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Edit Status', style: TextStyle(color: AppColors.white)),
-        content: TextField(
-          controller: controller,
-          style: const TextStyle(color: AppColors.white),
-          decoration: InputDecoration(
-            hintText: 'Enter your status',
-            hintStyle: const TextStyle(color: AppColors.hintText),
-            filled: true,
-            fillColor: AppColors.inputFill,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: AppColors.border),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: AppColors.border),
-            ),
-          ),
-        ),
+        content: _dialogTextField(controller, 'Your status', icon: Icons.info_outline),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -152,7 +188,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _showChangePasswordDialog() {
     final currentPassController = TextEditingController();
-    final newPassController = TextEditingController();
+    final newPassController     = TextEditingController();
     final confirmPassController = TextEditingController();
 
     showDialog(
@@ -179,7 +215,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           TextButton(
             onPressed: () async {
               final currentPass = currentPassController.text;
-              final newPass = newPassController.text;
+              final newPass     = newPassController.text;
               final confirmPass = confirmPassController.text;
 
               if (currentPass.isEmpty || newPass.isEmpty || confirmPass.isEmpty) {
@@ -250,7 +286,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _showSnackBar('Please enter your password');
                 return;
               }
-
               try {
                 final user = AuthService().currentUser!;
                 final credential = EmailAuthProvider.credential(
@@ -290,8 +325,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 40,
-              height: 4,
+              width: 40, height: 4,
               decoration: BoxDecoration(
                 color: AppColors.hintText,
                 borderRadius: BorderRadius.circular(2),
@@ -332,6 +366,96 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // ── Reusable dialog widgets ───────────────────────────────────────────────
+
+  Widget _dialogLabel(String label) {
+    return Text(
+      label,
+      style: const TextStyle(
+        color: AppColors.secondaryText,
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+
+  Widget _dialogTextField(
+    TextEditingController controller,
+    String hint, {
+    bool obscure = false,
+    IconData? icon,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      style: const TextStyle(color: AppColors.white),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: AppColors.hintText),
+        prefixIcon: icon != null
+            ? Icon(icon, color: AppColors.hintText, size: 20)
+            : null,
+        filled: true,
+        fillColor: AppColors.inputFill,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.primaryPurple),
+        ),
+      ),
+    );
+  }
+
+  Widget _readOnlyField({
+    required String value,
+    required IconData icon,
+    required String note,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: AppColors.hintText, size: 20),
+              const SizedBox(width: 10),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: AppColors.secondaryText,
+                  fontSize: 15,
+                ),
+              ),
+              const Spacer(),
+              const Icon(Icons.lock_outline, size: 14, color: AppColors.hintText),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Text(
+            note,
+            style: const TextStyle(color: AppColors.hintText, fontSize: 11),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _bottomSheetOption({
     required IconData icon,
     required String title,
@@ -353,37 +477,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(width: 14),
             Text(
               title,
-              style: TextStyle(
-                color: color,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.w500),
             ),
             const Spacer(),
             const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.hintText),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _dialogTextField(TextEditingController controller, String hint, {bool obscure = false}) {
-    return TextField(
-      controller: controller,
-      obscureText: obscure,
-      style: const TextStyle(color: AppColors.white),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: AppColors.hintText),
-        filled: true,
-        fillColor: AppColors.inputFill,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: AppColors.border),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: AppColors.border),
         ),
       ),
     );
@@ -421,8 +519,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 44, height: 44,
                 decoration: BoxDecoration(
                   color: iconColor.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(14),
@@ -453,11 +550,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
-              const Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 16,
-                color: AppColors.hintText,
-              ),
+              const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppColors.hintText),
             ],
           ),
         ),
@@ -465,9 +558,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-      ),
+      appBar: AppBar(title: const Text('Profile')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -476,9 +567,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   const SizedBox(height: 8),
 
+                  // Avatar
                   Container(
-                    width: 110,
-                    height: 110,
+                    width: 110, height: 110,
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: LinearGradient(
@@ -503,27 +594,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   const SizedBox(height: 18),
 
+                  Text(_name, style: AppTextStyles.screenTitle),
+
+                  const SizedBox(height: 4),
+
+                  // Username shown below name
                   Text(
-                    _name,
-                    style: AppTextStyles.screenTitle,
+                    '@$_username',
+                    style: const TextStyle(
+                      color: AppColors.hintText,
+                      fontSize: 13,
+                    ),
                   ),
 
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
 
-                  Text(
-                    _email,
-                    style: AppTextStyles.small,
-                  ),
+                  Text(_email, style: AppTextStyles.small),
 
                   const SizedBox(height: 10),
 
+                  // Status badge
                   GestureDetector(
                     onTap: _showEditStatusDialog,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
                         color: AppColors.cardBackground,
                         borderRadius: BorderRadius.circular(30),
@@ -552,7 +646,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     icon: Icons.person_outline,
                     title: 'Edit Profile',
                     subtitle: 'Update your name and status',
-                    onTap: _showEditNameDialog,
+                    onTap: _showEditProfileDialog, // ← updated
                   ),
 
                   const SizedBox(height: 12),
@@ -581,10 +675,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: _logout,
-                      icon: const Icon(
-                        Icons.logout_rounded,
-                        color: AppColors.softPink,
-                      ),
+                      icon: const Icon(Icons.logout_rounded, color: AppColors.softPink),
                       label: const Text(
                         'Logout',
                         style: TextStyle(

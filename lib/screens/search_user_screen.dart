@@ -21,7 +21,7 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
   List<Map<String, dynamic>> _recentPartners = [];
   bool _isLoading = false;
   bool _hasSearched = false;
-  String? _creatingChatForUid; // tracks which user's Chat button is loading
+  String? _creatingChatForUid;
 
   final _avatarColors = [
     AppColors.primaryPurple,
@@ -46,9 +46,7 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
     final currentUid = AuthService().currentUser!.uid;
     final partners = await DatabaseService().getRecentChatPartners(currentUid);
     if (mounted) {
-      setState(() {
-        _recentPartners = partners;
-      });
+      setState(() => _recentPartners = partners);
     }
   }
 
@@ -70,29 +68,19 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
       final currentUid = AuthService().currentUser!.uid;
       final queryLower = query.trim().toLowerCase();
 
-      final nameSnapshot = await FirebaseFirestore.instance
+      // Single username query — clean and exact
+      final snapshot = await FirebaseFirestore.instance
           .collection('users')
-          .where('name', isEqualTo: queryLower)
+          .where('username', isEqualTo: queryLower)
           .get();
 
-      final emailSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: queryLower)
-          .get();
-
-      final Map<String, Map<String, dynamic>> combined = {};
-
-      for (var doc in [...nameSnapshot.docs, ...emailSnapshot.docs]) {
-        if (doc.id != currentUid && !combined.containsKey(doc.id)) {
-          combined[doc.id] = {
-            'uid': doc.id,
-            ...doc.data(),
-          };
-        }
-      }
+      final results = snapshot.docs
+          .where((doc) => doc.id != currentUid)
+          .map((doc) => {'uid': doc.id, ...doc.data()})
+          .toList();
 
       setState(() {
-        _results = combined.values.toList();
+        _results = results;
         _isLoading = false;
       });
     } catch (e) {
@@ -101,16 +89,15 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
   }
 
   Future<void> _openChat(Map<String, dynamic> user) async {
-    if (_creatingChatForUid != null) return; // prevent double tap
+    if (_creatingChatForUid != null) return;
 
     final otherUid = user['uid'];
-
     setState(() => _creatingChatForUid = otherUid);
 
     try {
       final currentUid = AuthService().currentUser!.uid;
-      final chatRoomId = await DatabaseService()
-          .getOrCreateChatRoom(currentUid, otherUid);
+      final chatRoomId =
+          await DatabaseService().getOrCreateChatRoom(currentUid, otherUid);
 
       if (mounted) {
         Navigator.pushNamed(
@@ -130,7 +117,8 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
             content: const Text('Failed to open chat. Please try again.'),
             backgroundColor: Colors.red.shade400,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       }
@@ -142,7 +130,7 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
   Widget _buildUserTile(Map<String, dynamic> user, int index) {
     final color = _avatarColors[index % _avatarColors.length];
     final name = user['name'] ?? 'Unknown';
-    final email = user['email'] ?? '';
+    final username = user['username'] ?? '';
     final otherUid = user['uid'];
     final isCreating = _creatingChatForUid == otherUid;
     final anyCreating = _creatingChatForUid != null;
@@ -182,7 +170,7 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  email,
+                  '@$username',  // ← username instead of email
                   style: const TextStyle(
                     color: AppColors.secondaryText,
                     fontSize: 13,
@@ -193,16 +181,19 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
           ),
           const SizedBox(width: 10),
 
-          // Chat button with loader
           GestureDetector(
             onTap: anyCreating ? null : () => _openChat(user),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: anyCreating && !isCreating
-                      ? [AppColors.primaryPurple.withOpacity(0.4), AppColors.secondaryPurple.withOpacity(0.4)]
+                      ? [
+                          AppColors.primaryPurple.withOpacity(0.4),
+                          AppColors.secondaryPurple.withOpacity(0.4)
+                        ]
                       : [AppColors.primaryPurple, AppColors.secondaryPurple],
                 ),
                 borderRadius: BorderRadius.circular(14),
@@ -242,7 +233,7 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Enter full name or email to find a user',
+              'Enter exact username to find a user',  // ← updated
               style: AppTextStyles.small,
             ),
             const SizedBox(height: 18),
@@ -259,14 +250,15 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
                 onSubmitted: _searchUsers,
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
-                  hintText: 'Search by full name or email',
+                  hintText: 'Search by username',  // ← updated
                   prefixIcon: const Icon(
-                    Icons.search,
+                    Icons.alternate_email,  // ← @ icon fits username better
                     color: AppColors.secondaryText,
                   ),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.clear, color: AppColors.hintText, size: 20),
+                          icon: const Icon(Icons.clear,
+                              color: AppColors.hintText, size: 20),
                           onPressed: () {
                             _searchController.clear();
                             setState(() {
@@ -300,7 +292,7 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
                   : _hasSearched && _results.isEmpty
                       ? const Center(
                           child: Text(
-                            'No users found.\nMake sure you enter the full name or email.',
+                            'No users found.\nMake sure you enter the exact username.',  // ← updated
                             style: AppTextStyles.small,
                             textAlign: TextAlign.center,
                           ),
@@ -308,7 +300,8 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
                       : _hasSearched
                           ? ListView.separated(
                               itemCount: _results.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 12),
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
                               itemBuilder: (context, index) =>
                                   _buildUserTile(_results[index], index),
                             )
@@ -322,9 +315,11 @@ class _SearchUserScreenState extends State<SearchUserScreen> {
                                 )
                               : ListView.separated(
                                   itemCount: _recentPartners.length,
-                                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(height: 12),
                                   itemBuilder: (context, index) =>
-                                      _buildUserTile(_recentPartners[index], index),
+                                      _buildUserTile(
+                                          _recentPartners[index], index),
                                 ),
             ),
           ],

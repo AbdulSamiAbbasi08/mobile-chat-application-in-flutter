@@ -28,7 +28,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String _loadingMessage = 'Creating your account...';
   String _usernameError = '';
   bool _isCheckingUsername = false;
-  int _passwordStrength = 0; // 0=empty, 1=weak, 2=fair, 3=strong
+  int _passwordStrength = 0;
 
   @override
   void initState() {
@@ -67,7 +67,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void _onUsernameChanged() {
     final username = _usernameController.text;
 
-    // Validate format immediately
     if (username.contains(' ')) {
       setState(() => _usernameError = 'Username cannot contain spaces');
       return;
@@ -83,7 +82,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _usernameError = '');
 
-    // Check availability after 800ms debounce
     if (username.length >= 3) {
       Future.delayed(const Duration(milliseconds: 800), () async {
         if (_usernameController.text == username && mounted) {
@@ -103,13 +101,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _register() async {
     final name = _nameController.text.trim();
     final username = _usernameController.text.trim().toLowerCase();
-    final email = _emailController.text.trim();
+    final email = _emailController.text.trim(); // ← now required
     final password = _passwordController.text;
     final confirmPassword = _confirmPasswordController.text;
 
-    // Validations
-    if (name.isEmpty || username.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
-      _showError('Please fill in all required fields');
+    // All fields required — email included
+    if (name.isEmpty || username.isEmpty || email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
+      _showError('Please fill in all fields');
       return;
     }
     if (username.length < 3) {
@@ -118,6 +116,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
     if (_usernameError.isNotEmpty) {
       _showError(_usernameError);
+      return;
+    }
+    // Always validate email format
+    if (!RegExp(r'^[\w\.-]+@[\w\.-]+\.\w+$').hasMatch(email)) {
+      _showError('Please enter a valid email address');
       return;
     }
     if (password.length < 6) {
@@ -129,22 +132,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    // If email provided, validate format
-    if (email.isNotEmpty && !RegExp(r'^[\w\.-]+@[\w\.-]+\.\w+$').hasMatch(email)) {
-      _showError('Please enter a valid email address');
-      return;
-    }
-
-    // If no email, generate one from username
-    final finalEmail = email.isNotEmpty ? email : '$username@swiftsync.app';
-
     setState(() {
       _isLoading = true;
       _loadingMessage = 'Checking username availability...';
     });
 
     try {
-      // Final username availability check
       final available = await DatabaseService().isUsernameAvailable(username);
       if (!available) {
         _showError('Username already taken. Please choose another.');
@@ -153,17 +146,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       setState(() => _loadingMessage = 'Creating your account...');
 
-      // Create Firebase Auth account
-      final credential = await AuthService().register(finalEmail, password);
+      final credential = await AuthService().register(email, password); // ← no fake email
 
       setState(() => _loadingMessage = 'Saving your profile...');
 
-      // Save profile to Firestore
       await DatabaseService().createUserProfile(
         uid: credential.user!.uid,
         name: name,
         username: username,
-        email: finalEmail,
+        email: email,
       );
 
       if (mounted) {
@@ -219,7 +210,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Main content
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
@@ -270,7 +260,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                       const SizedBox(height: 16),
 
-                      // Username field with availability indicator
+                      // Username with availability indicator
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -351,10 +341,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               padding: EdgeInsets.only(top: 6, left: 4),
                               child: Text(
                                 'Username available ✓',
-                                style: TextStyle(
-                                  color: Colors.green,
-                                  fontSize: 12,
-                                ),
+                                style: TextStyle(color: Colors.green, fontSize: 12),
                               ),
                             ),
                         ],
@@ -362,9 +349,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                       const SizedBox(height: 16),
 
-                      // Email (optional)
+                      // Email — now required ↓
                       CustomTextField(
-                        hintText: 'Email address (optional)',
+                        hintText: 'Email address', // ← removed "(optional)"
                         prefixIcon: Icons.email_outlined,
                         controller: _emailController,
                       ),
@@ -379,7 +366,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         controller: _passwordController,
                       ),
 
-                      // Password strength indicator
                       if (_passwordStrength > 0) ...[
                         const SizedBox(height: 8),
                         Row(
@@ -420,7 +406,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               : _passwordStrength == 2
                                   ? 'Add uppercase letters and numbers for stronger password'
                                   : 'Great password!',
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: AppColors.hintText,
                             fontSize: 11,
                           ),
@@ -481,7 +467,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ),
 
-          // Full screen loader overlay
           if (_isLoading)
             Container(
               color: Colors.black.withOpacity(0.6),

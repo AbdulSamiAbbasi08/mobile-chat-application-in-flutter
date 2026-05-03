@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/custom_text_field.dart';
@@ -45,7 +46,6 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      // Step 1 — look up email by username
       final email = await DatabaseService().getEmailByUsername(username);
 
       if (email == null) {
@@ -55,7 +55,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
       setState(() => _loadingMessage = 'Logging in...');
 
-      // Step 2 — sign in with email
       await AuthService().login(email, password);
 
       if (mounted) {
@@ -67,6 +66,116 @@ class _LoginScreenState extends State<LoginScreen> {
           e.toString().contains('invalid-credential')) {
         message = 'Incorrect password';
       } else if (e.toString().contains('too-many-requests')) {
+        message = 'Too many attempts. Please try again later.';
+      }
+      _showError(message);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _forgotPassword() async {
+    final forgotUsernameController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardBackground,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Reset Password',
+          style: TextStyle(color: AppColors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your username and we\'ll send a password reset link to your registered email address.',
+              style: TextStyle(color: AppColors.secondaryText, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: forgotUsernameController,
+              autofocus: true,
+              style: const TextStyle(color: AppColors.white),
+              decoration: InputDecoration(
+                hintText: 'Username',
+                hintStyle: const TextStyle(color: AppColors.hintText),
+                prefixIcon: const Icon(Icons.alternate_email, color: AppColors.hintText, size: 20),
+                filled: true,
+                fillColor: AppColors.inputFill,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.primaryPurple),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.hintText)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Send Reset Link',
+              style: TextStyle(color: AppColors.softPink, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final username = forgotUsernameController.text.trim().toLowerCase();
+    forgotUsernameController.dispose();
+
+    if (username.isEmpty) {
+      _showError('Please enter your username');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _loadingMessage = 'Sending reset link...';
+    });
+
+    try {
+      final email = await DatabaseService().getEmailByUsername(username);
+
+      if (email == null) {
+        _showError('No account found with this username');
+        return;
+      }
+
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reset link sent to $email'),
+            backgroundColor: Colors.green.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      String message = 'Failed to send reset link. Try again.';
+      if (e.toString().contains('too-many-requests')) {
         message = 'Too many attempts. Please try again later.';
       }
       _showError(message);
@@ -92,7 +201,6 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Main content
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
@@ -149,7 +257,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {},
+                      onPressed: _isLoading ? null : _forgotPassword, // ← wired up
                       child: const Text(
                         'Forgot Password?',
                         style: TextStyle(
@@ -202,14 +310,12 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
 
-          // Full screen loader overlay
           if (_isLoading)
             Container(
               color: Colors.black.withOpacity(0.6),
               child: Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 32, vertical: 28),
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
                   decoration: BoxDecoration(
                     color: AppColors.cardBackground,
                     borderRadius: BorderRadius.circular(24),
