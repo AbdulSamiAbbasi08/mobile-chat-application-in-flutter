@@ -44,6 +44,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Firebase config — never commit these
 android/app/google-services.json
 lib/firebase_options.dart
 ios/Runner/GoogleService-Info.plist
+
+# API Keys — never commit this
+lib/config/api_keys.dart

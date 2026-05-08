@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
+import 'screens/ai_chat_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
@@ -37,13 +38,14 @@ class SwiftSyncApp extends StatelessWidget {
       theme: AppTheme.darkTheme,
       initialRoute: SplashScreen.routeName,
       routes: {
-        SplashScreen.routeName: (context) => const SplashScreen(),
-        LoginScreen.routeName: (context) => const LoginScreen(),
-        RegisterScreen.routeName: (context) => const RegisterScreen(),
-        HomeScreen.routeName: (context) => const HomeScreen(),
-        ChatScreen.routeName: (context) => const ChatScreen(),
-        SearchUserScreen.routeName: (context) => const SearchUserScreen(),
-        ProfileScreen.routeName: (context) => const ProfileScreen(),
+        SplashScreen.routeName:      (context) => const SplashScreen(),
+        LoginScreen.routeName:       (context) => const LoginScreen(),
+        RegisterScreen.routeName:    (context) => const RegisterScreen(),
+        HomeScreen.routeName:        (context) => const HomeScreen(),
+        ChatScreen.routeName:        (context) => const ChatScreen(),
+        SearchUserScreen.routeName:  (context) => const SearchUserScreen(),
+        ProfileScreen.routeName:     (context) => const ProfileScreen(),
+        AiChatScreen.routeName:      (context) => const AiChatScreen(), // ← added
       },
     );
   }

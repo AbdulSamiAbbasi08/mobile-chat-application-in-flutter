@@ -58,6 +58,10 @@ class DatabaseService {
     for (var doc in existing.docs) {
       final participants = List<String>.from(doc['participants']);
       if (participants.contains(otherUid)) {
+        // Reset deletedFor so both users can see it again
+        await _db.collection('chatRooms').doc(doc.id).update({
+          'deletedFor': [],
+        });
         return doc.id;
       }
     }
@@ -67,7 +71,7 @@ class DatabaseService {
       'lastMessage': '',
       'lastMessageTime': FieldValue.serverTimestamp(),
       'lastMessageSenderId': '',
-      'deletedFor': [], // Initialize empty array
+      'deletedFor': [],
     });
 
     return newRoom.id;
@@ -78,7 +82,6 @@ class DatabaseService {
     return _db
         .collection('chatRooms')
         .where('participants', arrayContains: uid)
-        // .orderBy('lastMessageTime', descending: true) 
         .snapshots();
   }
 
@@ -95,8 +98,6 @@ class DatabaseService {
     for (var room in rooms.docs) {
       final data = room.data();
       final deletedFor = List<String>.from(data['deletedFor'] ?? []);
-      
-      // Skip if current user deleted this chat
       if (deletedFor.contains(uid)) continue;
 
       final participants = List<String>.from(room['participants']);
@@ -138,7 +139,7 @@ class DatabaseService {
     });
   }
 
-    // Update full profile (name + status)
+  // Update full profile (name + status)
   Future<void> updateUserProfile(String uid, {
     required String name,
     required String status,
@@ -149,35 +150,119 @@ class DatabaseService {
     });
   }
 
-
-    // Mark chat as read by updating lastReadTime for current user
+  // Mark chat as read by updating lastReadTime for current user
   Future<void> markChatAsRead(String chatRoomId, String uid) async {
     await _db.collection('chatRooms').doc(chatRoomId).update({
       'lastRead.$uid': FieldValue.serverTimestamp(),
     });
   }
 
-
-    // Mark all messages in a chat as seen by the receiver
+  // Mark all messages in a chat as seen by the receiver
   Future<void> markMessagesAsSeen(String chatRoomId, String currentUid) async {
-  final messages = await _db
-      .collection('chatRooms')
-      .doc(chatRoomId)
-      .collection('messages')
-      .where('senderId', isNotEqualTo: currentUid)
-      .get();
+    final messages = await _db
+        .collection('chatRooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .where('senderId', isNotEqualTo: currentUid)
+        .get();
 
-  final docsToUpdate = messages.docs.where((doc) {
-    final status = doc.data()['status'] as String? ?? 'sent';
-    return status != 'seen';
-  }).toList();
+    final docsToUpdate = messages.docs.where((doc) {
+      final status = doc.data()['status'] as String? ?? 'sent';
+      return status != 'seen';
+    }).toList();
 
-  if (docsToUpdate.isEmpty) return;
+    if (docsToUpdate.isEmpty) return;
 
-  final batch = _db.batch();
-  for (final doc in docsToUpdate) {
-    batch.update(doc.reference, {'status': 'seen'});
+    final batch = _db.batch();
+    for (final doc in docsToUpdate) {
+      batch.update(doc.reference, {'status': 'seen'});
+    }
+    await batch.commit();
   }
-  await batch.commit();
-}
+
+  // ── AI Chat Methods ───────────────────────────────────────────────────────
+
+  // Get AI chat messages stream for current user
+  Stream<QuerySnapshot> getAiMessages(String uid) {
+    return _db
+        .collection('aiChats')
+        .doc(uid)
+        .collection('messages')
+        .orderBy('timestamp', descending: false)
+        .snapshots();
+  }
+
+  // Get all AI messages as a list (for sending context to Groq)
+  Future<List<Map<String, dynamic>>> getAiMessagesList(String uid) async {
+    final snapshot = await _db
+        .collection('aiChats')
+        .doc(uid)
+        .collection('messages')
+        .orderBy('timestamp', descending: false)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => doc.data())
+        .toList();
+  }
+
+  // Save a message to AI chat
+  Future<void> saveAiMessage(String uid, String role, String text) async {
+    final batch = _db.batch();
+
+    // Add message to subcollection
+    final msgRef = _db
+        .collection('aiChats')
+        .doc(uid)
+        .collection('messages')
+        .doc();
+    batch.set(msgRef, {
+      'role': role,
+      'text': text,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    // Update lastMessageTime on parent doc
+    final parentRef = _db.collection('aiChats').doc(uid);
+    batch.set(parentRef, {
+      'lastMessageTime': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await batch.commit();
+  }
+
+  // Check if AI conversation should reset (1 hour inactivity)
+  Future<bool> shouldResetAiChat(String uid) async {
+    final doc = await _db.collection('aiChats').doc(uid).get();
+    if (!doc.exists) return false;
+
+    final lastMessageTime = doc.data()?['lastMessageTime'] as Timestamp?;
+    if (lastMessageTime == null) return false;
+
+    final diff = DateTime.now().difference(lastMessageTime.toDate());
+    return diff.inHours >= 1;
+  }
+
+  // Clear all AI chat messages (reset conversation)
+  Future<void> clearAiChat(String uid) async {
+    final messages = await _db
+        .collection('aiChats')
+        .doc(uid)
+        .collection('messages')
+        .get();
+
+    final batch = _db.batch();
+    for (final doc in messages.docs) {
+      batch.delete(doc.reference);
+    }
+
+    // Reset parent doc
+    batch.set(
+      _db.collection('aiChats').doc(uid),
+      {'lastMessageTime': null},
+      SetOptions(merge: true),
+    );
+
+    await batch.commit();
+  }
 }

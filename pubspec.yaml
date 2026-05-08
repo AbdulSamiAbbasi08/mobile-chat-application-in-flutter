@@ -15,6 +15,7 @@ dependencies:
   connectivity_plus: ^7.1.1
   image_picker: ^1.2.2
   firebase_storage: ^13.3.0
+  http: ^1.2.2        # ← added for Groq API calls
 
 dev_dependencies:
   flutter_test:
@@ -25,7 +26,7 @@ dev_dependencies:
 flutter_icons:
   android: true
   ios: true
-  image_path: "assets/images/app_logo.png"
+  image_path: "assets/images/appicon.png"
 
 flutter:
   uses-material-design: true
