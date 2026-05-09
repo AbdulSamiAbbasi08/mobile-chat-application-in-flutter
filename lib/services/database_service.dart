@@ -76,11 +76,12 @@ class DatabaseService {
     return newRoom.id;
   }
 
-  // Get chat rooms stream for current user
+  // Get chat rooms stream for current user — ordered by latest message
   Stream<QuerySnapshot> getChatRooms(String uid) {
     return _db
         .collection('chatRooms')
         .where('participants', arrayContains: uid)
+        .orderBy('lastMessageTime', descending: true) // ← uncommented
         .snapshots();
   }
 
@@ -248,14 +249,12 @@ class DatabaseService {
 
   // ── FCM Token Methods ─────────────────────────────────────────────────────
 
-  // Save FCM token to user's Firestore document
   Future<void> saveUserFcmToken(String uid, String token) async {
-  await _db.collection('users').doc(uid).set({
-    'fcmToken': token,
-  }, SetOptions(merge: true));
-}
+    await _db.collection('users').doc(uid).set({
+      'fcmToken': token,
+    }, SetOptions(merge: true));
+  }
 
-  // Get FCM token of another user (to send them a notification)
   Future<String?> getUserFcmToken(String uid) async {
     final doc = await _db.collection('users').doc(uid).get();
     if (!doc.exists) return null;
