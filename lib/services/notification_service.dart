@@ -24,7 +24,6 @@ class NotificationService {
 
   static GlobalKey<NavigatorState>? navigatorKey;
 
-  // Cached access token
   String? _cachedToken;
   DateTime? _tokenExpiry;
 
@@ -56,6 +55,7 @@ class NotificationService {
     try {
       return await _fcm.getToken();
     } catch (e) {
+      print('==== GET TOKEN ERROR: $e ====');
       return null;
     }
   }
@@ -145,41 +145,42 @@ class NotificationService {
 
   // ── Get OAuth access token using JWT + service account ────────────────────
   Future<String?> _getAccessToken() async {
-    // Return cached token if still valid
     if (_cachedToken != null &&
         _tokenExpiry != null &&
         DateTime.now().isBefore(_tokenExpiry!)) {
+      print('==== USING CACHED ACCESS TOKEN ====');
       return _cachedToken;
     }
 
     try {
+      print('==== LOADING SERVICE ACCOUNT JSON ====');
       final jsonStr =
           await rootBundle.loadString('assets/service_account.json');
       final serviceAccount = jsonDecode(jsonStr) as Map<String, dynamic>;
 
       final clientEmail = serviceAccount['client_email'] as String;
       final privateKeyPem = serviceAccount['private_key'] as String;
+      print('==== CLIENT EMAIL: $clientEmail ====');
 
       final now = DateTime.now();
 
-      // Create and sign JWT using dart_jsonwebtoken
-      final jwt = JWT(
-  {
-    'iss': clientEmail,
-    'scope': 'https://www.googleapis.com/auth/firebase.messaging',
-    'aud': 'https://oauth2.googleapis.com/token',
-    'iat': now.millisecondsSinceEpoch ~/ 1000,
-    'exp': (now.millisecondsSinceEpoch ~/ 1000) + 3600,
-  },
-);
+      final jwt = JWT({
+        'iss': clientEmail,
+        'scope': 'https://www.googleapis.com/auth/firebase.messaging',
+        'aud': 'https://oauth2.googleapis.com/token',
+        'iat': now.millisecondsSinceEpoch ~/ 1000,
+        'exp': (now.millisecondsSinceEpoch ~/ 1000) + 3600,
+      });
 
-final signedJwt = jwt.sign(
-  RSAPrivateKey(privateKeyPem),
-  algorithm: JWTAlgorithm.RS256,
-  noIssueAt: true,
-);
+      print('==== SIGNING JWT ====');
+      final signedJwt = jwt.sign(
+        RSAPrivateKey(privateKeyPem),
+        algorithm: JWTAlgorithm.RS256,
+        noIssueAt: true,
+      );
+      print('==== JWT SIGNED SUCCESSFULLY ====');
 
-      // Exchange JWT for access token
+      print('==== EXCHANGING JWT FOR ACCESS TOKEN ====');
       final response = await http.post(
         Uri.parse('https://oauth2.googleapis.com/token'),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -189,20 +190,26 @@ final signedJwt = jwt.sign(
         },
       );
 
+      print('==== TOKEN RESPONSE STATUS: ${response.statusCode} ====');
+      print('==== TOKEN RESPONSE BODY: ${response.body} ====');
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         _cachedToken = data['access_token'] as String?;
-        _tokenExpiry = now.add(const Duration(minutes: 55)); // refresh before 1hr
+        _tokenExpiry = now.add(const Duration(minutes: 55));
+        print('==== ACCESS TOKEN OBTAINED SUCCESSFULLY ====');
         return _cachedToken;
       }
 
+      print('==== FAILED TO GET ACCESS TOKEN ====');
       return null;
     } catch (e) {
+      print('==== GET ACCESS TOKEN ERROR: $e ====');
       return null;
     }
   }
 
-  // ── Send push notification ─────────────────────────────────────────────────
+  // ── Send push notification ────────────────────────────────────────────────
   Future<void> sendNotification({
     required String receiverToken,
     required String senderName,
@@ -211,8 +218,15 @@ final signedJwt = jwt.sign(
     required String senderUid,
   }) async {
     try {
+      print('==== SENDING NOTIFICATION TO: $receiverToken ====');
+
       final accessToken = await _getAccessToken();
-      if (accessToken == null) return;
+      print('==== ACCESS TOKEN RESULT: $accessToken ====');
+
+      if (accessToken == null) {
+        print('==== ACCESS TOKEN IS NULL — ABORTING NOTIFICATION ====');
+        return;
+      }
 
       final url =
           'https://fcm.googleapis.com/v1/projects/${ApiKeys.fcmProjectId}/messages:send';
@@ -236,13 +250,13 @@ final signedJwt = jwt.sign(
             'notification': {
               'channel_id': 'swiftsync_messages',
               'color': '#7C3AED',
-              'priority': 'high',
             },
           },
         }
       });
 
-      await http.post(
+      print('==== CALLING FCM API ====');
+      final fcmResponse = await http.post(
         Uri.parse(url),
         headers: {
           'Authorization': 'Bearer $accessToken',
@@ -250,8 +264,11 @@ final signedJwt = jwt.sign(
         },
         body: body,
       );
+
+      print('==== FCM RESPONSE STATUS: ${fcmResponse.statusCode} ====');
+      print('==== FCM RESPONSE BODY: ${fcmResponse.body} ====');
     } catch (e) {
-      // Fail silently — notification is not critical to message delivery
+      print('==== SEND NOTIFICATION ERROR: $e ====');
     }
   }
 }

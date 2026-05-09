@@ -24,25 +24,20 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _initAndNavigate() async {
-    // Initialize notifications
     await NotificationService().initialize(
       NotificationService.navigatorKey!,
     );
 
     final user = AuthService().currentUser;
 
-    // If logged in, save/refresh FCM token
     if (user != null) {
       final token = await NotificationService().getToken();
       if (token != null) {
         await DatabaseService().saveUserFcmToken(user.uid, token);
       }
-
-      // Handle notification tap if app was opened from closed state
       await NotificationService().handleInitialMessage();
     }
 
-    // Wait at least 4 seconds for splash to show
     await Future.delayed(const Duration(seconds: 4));
 
     if (!mounted) return;

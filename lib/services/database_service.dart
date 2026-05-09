@@ -250,10 +250,10 @@ class DatabaseService {
 
   // Save FCM token to user's Firestore document
   Future<void> saveUserFcmToken(String uid, String token) async {
-    await _db.collection('users').doc(uid).update({
-      'fcmToken': token,
-    });
-  }
+  await _db.collection('users').doc(uid).set({
+    'fcmToken': token,
+  }, SetOptions(merge: true));
+}
 
   // Get FCM token of another user (to send them a notification)
   Future<String?> getUserFcmToken(String uid) async {
