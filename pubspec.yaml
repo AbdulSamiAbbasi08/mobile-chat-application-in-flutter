@@ -15,7 +15,10 @@ dependencies:
   connectivity_plus: ^7.1.1
   image_picker: ^1.2.2
   firebase_storage: ^13.3.0
-  http: ^1.2.2        # ← added for Groq API calls
+  http: ^1.2.2
+  firebase_messaging: 16.2.0
+  flutter_local_notifications: ^18.0.1
+  dart_jsonwebtoken: ^2.6.0
 
 dev_dependencies:
   flutter_test:
@@ -32,3 +35,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/service_account.json    # ← FCM service account credentials

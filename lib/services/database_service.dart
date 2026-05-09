@@ -58,7 +58,6 @@ class DatabaseService {
     for (var doc in existing.docs) {
       final participants = List<String>.from(doc['participants']);
       if (participants.contains(otherUid)) {
-        // Reset deletedFor so both users can see it again
         await _db.collection('chatRooms').doc(doc.id).update({
           'deletedFor': [],
         });
@@ -182,7 +181,6 @@ class DatabaseService {
 
   // ── AI Chat Methods ───────────────────────────────────────────────────────
 
-  // Get AI chat messages stream for current user
   Stream<QuerySnapshot> getAiMessages(String uid) {
     return _db
         .collection('aiChats')
@@ -192,7 +190,6 @@ class DatabaseService {
         .snapshots();
   }
 
-  // Get all AI messages as a list (for sending context to Groq)
   Future<List<Map<String, dynamic>>> getAiMessagesList(String uid) async {
     final snapshot = await _db
         .collection('aiChats')
@@ -200,17 +197,11 @@ class DatabaseService {
         .collection('messages')
         .orderBy('timestamp', descending: false)
         .get();
-
-    return snapshot.docs
-        .map((doc) => doc.data())
-        .toList();
+    return snapshot.docs.map((doc) => doc.data()).toList();
   }
 
-  // Save a message to AI chat
   Future<void> saveAiMessage(String uid, String role, String text) async {
     final batch = _db.batch();
-
-    // Add message to subcollection
     final msgRef = _db
         .collection('aiChats')
         .doc(uid)
@@ -221,48 +212,53 @@ class DatabaseService {
       'text': text,
       'timestamp': FieldValue.serverTimestamp(),
     });
-
-    // Update lastMessageTime on parent doc
     final parentRef = _db.collection('aiChats').doc(uid);
     batch.set(parentRef, {
       'lastMessageTime': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
-
     await batch.commit();
   }
 
-  // Check if AI conversation should reset (1 hour inactivity)
   Future<bool> shouldResetAiChat(String uid) async {
     final doc = await _db.collection('aiChats').doc(uid).get();
     if (!doc.exists) return false;
-
     final lastMessageTime = doc.data()?['lastMessageTime'] as Timestamp?;
     if (lastMessageTime == null) return false;
-
     final diff = DateTime.now().difference(lastMessageTime.toDate());
     return diff.inHours >= 1;
   }
 
-  // Clear all AI chat messages (reset conversation)
   Future<void> clearAiChat(String uid) async {
     final messages = await _db
         .collection('aiChats')
         .doc(uid)
         .collection('messages')
         .get();
-
     final batch = _db.batch();
     for (final doc in messages.docs) {
       batch.delete(doc.reference);
     }
-
-    // Reset parent doc
     batch.set(
       _db.collection('aiChats').doc(uid),
       {'lastMessageTime': null},
       SetOptions(merge: true),
     );
-
     await batch.commit();
+  }
+
+  // ── FCM Token Methods ─────────────────────────────────────────────────────
+
+  // Save FCM token to user's Firestore document
+  Future<void> saveUserFcmToken(String uid, String token) async {
+    await _db.collection('users').doc(uid).update({
+      'fcmToken': token,
+    });
+  }
+
+  // Get FCM token of another user (to send them a notification)
+  Future<String?> getUserFcmToken(String uid) async {
+    final doc = await _db.collection('users').doc(uid).get();
+    if (!doc.exists) return null;
+    return doc.data()?['fcmToken'] as String?;
   }
 }

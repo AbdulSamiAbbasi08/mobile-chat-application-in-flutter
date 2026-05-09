@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../services/auth_service.dart';
+import '../services/database_service.dart';
+import '../services/notification_service.dart';
 import 'login_screen.dart';
 import 'home_screen.dart';
 
@@ -18,30 +20,47 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
+    _initAndNavigate();
+  }
 
-    Future.delayed(const Duration(seconds: 4), () {
-      final user = AuthService().currentUser;
-      final destination = user != null ? const HomeScreen() : const LoginScreen();
+  Future<void> _initAndNavigate() async {
+    // Initialize notifications
+    await NotificationService().initialize(
+      NotificationService.navigatorKey!,
+    );
 
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => destination,
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            const begin = 0.0;
-            const end = 1.0;
+    final user = AuthService().currentUser;
 
-            var tween = Tween(begin: begin, end: end);
-            var fadeAnimation = animation.drive(tween);
+    // If logged in, save/refresh FCM token
+    if (user != null) {
+      final token = await NotificationService().getToken();
+      if (token != null) {
+        await DatabaseService().saveUserFcmToken(user.uid, token);
+      }
 
-            return FadeTransition(
-              opacity: fadeAnimation,
-              child: child,
-            );
-          },
-          transitionDuration: const Duration(milliseconds: 600),
-        ),
-      );
-    });
+      // Handle notification tap if app was opened from closed state
+      await NotificationService().handleInitialMessage();
+    }
+
+    // Wait at least 4 seconds for splash to show
+    await Future.delayed(const Duration(seconds: 4));
+
+    if (!mounted) return;
+
+    final destination =
+        user != null ? const HomeScreen() : const LoginScreen();
+
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => destination,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final tween = Tween(begin: 0.0, end: 1.0);
+          final fadeAnimation = animation.drive(tween);
+          return FadeTransition(opacity: fadeAnimation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 600),
+      ),
+    );
   }
 
   @override

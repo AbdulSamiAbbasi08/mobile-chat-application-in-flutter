@@ -51,3 +51,7 @@ ios/Runner/GoogleService-Info.plist
 
 # API Keys — never commit this
 lib/config/api_keys.dart
+
+
+# FCM Service Account — never commit this
+assets/service_account.json

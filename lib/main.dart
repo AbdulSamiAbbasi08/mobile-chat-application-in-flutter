@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,19 +11,27 @@ import 'screens/profile_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/search_user_screen.dart';
 import 'screens/splash_screen.dart';
+import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Register background message handler
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
   // Enable Firestore offline persistence
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
+
+  // Set up navigator key for notification navigation
+  NotificationService.navigatorKey = GlobalKey<NavigatorState>();
 
   runApp(const SwiftSyncApp());
 }
@@ -36,16 +45,17 @@ class SwiftSyncApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'SwiftSync',
       theme: AppTheme.darkTheme,
+      navigatorKey: NotificationService.navigatorKey, // ← needed for notification navigation
       initialRoute: SplashScreen.routeName,
       routes: {
-        SplashScreen.routeName:      (context) => const SplashScreen(),
-        LoginScreen.routeName:       (context) => const LoginScreen(),
-        RegisterScreen.routeName:    (context) => const RegisterScreen(),
-        HomeScreen.routeName:        (context) => const HomeScreen(),
-        ChatScreen.routeName:        (context) => const ChatScreen(),
-        SearchUserScreen.routeName:  (context) => const SearchUserScreen(),
-        ProfileScreen.routeName:     (context) => const ProfileScreen(),
-        AiChatScreen.routeName:      (context) => const AiChatScreen(), // ← added
+        SplashScreen.routeName:     (context) => const SplashScreen(),
+        LoginScreen.routeName:      (context) => const LoginScreen(),
+        RegisterScreen.routeName:   (context) => const RegisterScreen(),
+        HomeScreen.routeName:       (context) => const HomeScreen(),
+        ChatScreen.routeName:       (context) => const ChatScreen(),
+        SearchUserScreen.routeName: (context) => const SearchUserScreen(),
+        ProfileScreen.routeName:    (context) => const ProfileScreen(),
+        AiChatScreen.routeName:     (context) => const AiChatScreen(),
       },
     );
   }
